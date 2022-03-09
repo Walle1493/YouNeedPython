@@ -11,8 +11,7 @@ from transformers import AdamW
 # optimizer = AdamW(optimizer_grouped_parameters, lr=lr)
 # n_gpu = torch.cuda.device_count()
 
-def do_train(args, model, optimizer, n_gpu):
-    
+def do_train(args, model, optimizer, n_gpu, step):
     
     if args.fp16:
         try:
@@ -31,6 +30,12 @@ def do_train(args, model, optimizer, n_gpu):
     if args.fp16:
         with amp.scale_loss(loss, optimizer) as scaled_loss:
             scaled_loss.backward()
+    
+    if (step + 1) % args.gradient_accumulation_steps == 0:
+        if args.fp16:
+            torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
+        else:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
 
 if __name__ == "__main__":
@@ -38,7 +43,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--fp16', action='store_true',
                         help="Whether to use 16-bit float precision instead of 32-bit")
-    parser.add_argument('--fp16_opt_level', type=str, default='O1',
+    parser.add_argument('--fp16_opt_level', type=str, default='O2',
                         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
                              "See details at https://nvidia.github.io/apex/amp.html")
+    parser.add_argument("--max_grad_norm", default=1.0, type=float,
+                        help="Max gradient norm.")
     args = parser.parse_args()
